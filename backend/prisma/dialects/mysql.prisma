@@ -1,0 +1,316 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// 全局身份只有三档：1 普通用户 / 10 系统管理员 / 100 超级管理员（0 是沿用 newapi Role 常量的保留值）。
+// 「租户管理员」不是全局身份，而是 tenant_members.role = 5 的租户内角色：
+// 同一个账号可以在 A 租户是管理员、在 B 租户只是普通成员，切租户换的是这一层。
+// 租户（Tenant）：平台交付给 B 端客户的独立站点/工作区，拥有自己的成员、额度池与订购记录。
+model Tenant {
+  id          Int      @id @default(autoincrement())
+  name        String
+  code        String   @unique // 租户编码（对账与检索用，也是自助加入的凭据）
+  contact     String   @default("")
+  status      Int      @default(1) // 1 启用 / 0 停用
+  quotaPool   Int      @default(0) @map("quota_pool") // 平台划拨给租户可分配的额度余量
+  usedQuota   Int      @default(0) @map("used_quota") // 本租户成员的累计消耗
+  expiresAt   Int      @default(0) @map("expires_at") // 0 = 长期；软件订阅到期秒级时间戳
+  remark      String   @default("")
+  createdAt   DateTime @default(now()) @map("created_at")
+  members     TenantMember[]
+  quotaTxns   TenantQuotaTxn[]
+  orders      PaymentOrder[]
+  entitlements TenantEntitlement[]
+
+  @@map("tenants")
+}
+
+// 租户订购软件后形成的租户权益：订阅（到期时间）或功能买断（永久）
+model TenantEntitlement {
+  id         Int      @id @default(autoincrement())
+  tenantId   Int      @map("tenant_id")
+  productId  String   @map("product_id")
+  name       String   @default("")
+  kind       String // subscription | feature
+  expiresAt  Int      @default(0) @map("expires_at") // 0 = 永久；订阅类为到期秒级时间戳
+  enabled    Int      @default(1)
+  createdAt  DateTime @default(now()) @map("created_at")
+  tenant     Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, productId])
+  @@map("tenant_entitlements")
+}
+
+// 租户额度池流水：平台划拨 / 回收 / 租户分配给自家 User / 订购额度包到账
+model TenantQuotaTxn {
+  id         Int      @id @default(autoincrement())
+  tenantId   Int      @map("tenant_id")
+  delta      Int
+  quotaAfter Int      @map("quota_after")
+  operatorId Int      @default(0) @map("operator_id")
+  note       String   @default("")
+  createdAt  DateTime @default(now()) @map("created_at")
+  tenant     Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@map("tenant_quota_txns")
+}
+
+model User {
+  id            Int      @id @default(autoincrement())
+  username      String   @unique
+  passwordHash  String   @map("password_hash")
+  displayName   String   @default("") @map("display_name")
+  role          Int      @default(1) // 全局身份：1 普通用户 / 10 系统管理员 / 100 超级管理员（0 保留）
+  status        Int      @default(1) // 1 启用 / 0 禁用
+  email         String   @default("")
+  userGroup     String   @default("default") @map("user_group")
+  affCode       String   @unique @default("") @map("aff_code")
+  inviterId     Int      @default(0) @map("inviter_id")
+  chandlerSub   String   @default("") @map("chandler_sub") // chandler.work 联合登录映射
+  chandlerToken String   @default("") @map("chandler_token") // 平台访问令牌：预支付需以付款人身份调用，仅存服务端
+  lastLoginAt   Int      @default(0) @map("last_login_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  memberships   TenantMember[]
+  tokens        Token[]
+  logs          Log[]
+  quotaTxns     QuotaTxn[]
+  orders        PaymentOrder[]
+
+  // 这里不再有 tenantId / quota / usedQuota / requestCount：
+  // 一个账号可属于多个租户，额度与用量都记在 tenant_members 这条成员身份上。
+  @@map("users")
+}
+
+// 人 ↔ 租户的多对多。切租户换的就是这一行：额度、用量、令牌、日志都按 (tenantId, userId) 各记各的。
+model TenantMember {
+  id           Int      @id @default(autoincrement())
+  tenantId     Int      @map("tenant_id")
+  userId       Int      @map("user_id")
+  role         Int      @default(1) // 租户内权限：1 成员 / 5 租户管理员
+  status       Int      @default(1) // 1 正常 / 0 已停用（身份保留留痕，停用后不能调用）
+  quota        Int      @default(0) // 本租户划给他、还没花掉的额度
+  usedQuota    Int      @default(0) @map("used_quota")
+  requestCount Int      @default(0) @map("request_count")
+  joinedAt     Int      @default(0) @map("joined_at") // 秒级
+  createdAt    DateTime @default(now()) @map("created_at")
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@unique([tenantId, userId])
+  @@index([userId])
+  @@map("tenant_members")
+}
+
+model Setting {
+  key       String   @id
+  value     String   @default("")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
+
+// 网关渠道：一个渠道 = 一个上游服务账号（可多 key，换行分隔）
+model Channel {
+  id               Int      @id @default(autoincrement())
+  // 上游供应商类型，编号沿用 new-api 的 constant/channel.go（1 OpenAI / 14 Anthropic / 43 DeepSeek / 45 火山引擎 …）
+  type             Int      @default(1)
+  name             String
+  key              String   @default("") // 多 key 换行分隔
+  baseUrl          String   @default("") @map("base_url")
+  // 上游 API 前缀，随供应商不同（OpenAI 兼容 /v1、火山 /api/v3、通义 /compatible-mode/v1、智谱 /api/paas/v4）
+  apiPrefix        String   @default("/v1") @map("api_prefix")
+  models           String   @default("")
+  group            String   @default("default")
+  priority         Int      @default(0)
+  weight           Int      @default(0)
+  status           Int      @default(1) // 1 启用 / 2 手动禁用 / 3 自动禁用
+  autoBan          Int      @default(1) @map("auto_ban")
+  modelMapping     String   @default("") @map("model_mapping") // JSON 字符串
+  paramOverride    String   @default("") @map("param_override")
+  headerOverride   String   @default("") @map("header_override")
+  otherSettings    String   @default("") @map("other_settings")
+  testModel        String   @default("") @map("test_model")
+  responseTime     Int      @default(0) @map("response_time") // ms
+  balance          Float    @default(0)
+  balanceUpdatedAt Int      @default(0) @map("balance_updated_at")
+  usedQuota        Int      @default(0) @map("used_quota")
+  tag              String   @default("")
+  remark           String   @default("")
+  isManaged        Int      @default(0) @map("is_managed") // 1 = 目录同步托管渠道
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@map("channels")
+}
+
+// 用户令牌：对外展示为 sk-<key>，库里存 48 位随机串。
+// 令牌签发给「某个用户在某个租户内」，调用扣的是那条成员身份的额度；tenantId 不做外键，
+// 成员被移出租户后历史令牌仍能查到归属并停用。
+model Token {
+  id               Int      @id @default(autoincrement())
+  userId           Int      @map("user_id")
+  tenantId         Int      @default(0) @map("tenant_id") // 0 = 归属未知（迁移前的历史令牌）
+  key              String   @unique
+  name             String   @default("")
+  status           Int      @default(1)
+  remainQuota      Int      @default(0) @map("remain_quota")
+  unlimitedQuota   Boolean  @default(true) @map("unlimited_quota")
+  usedQuota        Int      @default(0) @map("used_quota")
+  modelLimitsOn    Boolean  @default(false) @map("model_limits_on")
+  modelLimits      String   @default("") @map("model_limits") // 逗号分隔
+  allowIps         String   @default("") @map("allow_ips")
+  expiredAt        Int      @default(-1) @map("expired_at") // -1 永不过期
+  group            String   @default("")
+  createdAt        DateTime @default(now()) @map("created_at")
+  accessedAt       Int      @default(0) @map("accessed_at")
+  user             User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([tenantId, userId])
+  @@map("tokens")
+}
+
+// 模型目录/计费配置：ratio 为相对基准价倍率；目录同步渠道按上游批发价×markup 生成
+model GatewayModel {
+  id               Int      @id @default(autoincrement())
+  modelName        String   @unique @map("model_name")
+  description      String   @default("")
+  icon             String   @default("")
+  tags             String   @default("")
+  vendorName       String   @default("") @map("vendor_name")
+  quotaType        Int      @default(0) @map("quota_type") // 0 按token / 1 按次
+  modelRatio       Float    @default(0) @map("model_ratio") // 输入 元 / 1M tokens（额度换算基数见 quota_per_unit）
+  completionRatio  Float    @default(1) @map("completion_ratio")
+  cacheReadRatio   Float    @default(0) @map("cache_read_ratio")
+  cacheWriteRatio  Float    @default(0) @map("cache_write_ratio")
+  callCnyPrice     Float    @default(0) @map("call_cny_price") // quotaType=1 时单次 元
+  enableGroups     String   @default("default") @map("enable_groups")
+  groupRatio       Float    @default(1)
+  priceSource      String   @default("manual") @map("price_source") // manual / catalog / pinned
+  endpoints        String   @default("chat") // 逗号分隔：chat,messages,embeddings
+  multimodal       Boolean  @default(false)
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("gateway_models")
+}
+
+// 上游模型目录快照（{base}/v1/new-api/catalog 原样 JSON）
+model CatalogSnapshot {
+  id            Int      @id @default(1) // 单行表
+  schemaVersion String   @default("") @map("schema_version")
+  revision      String   @default("")
+  sourceBaseUrl String   @default("") @map("source_base_url")
+  payload       String   @default("{}")
+  syncedAt      DateTime @default(now()) @map("synced_at")
+
+  @@map("catalog_snapshot")
+}
+
+// 消费/充值/管理流水（镜像 newapi Log 类型：1 Topup 2 Consume 3 Manage 4 System 5 Error 6 Refund）
+model Log {
+  id               Int      @id @default(autoincrement())
+  userId           Int      @map("user_id")
+  tenantId         Int      @default(0) @map("tenant_id") // 这次调用发生在哪个租户里；0 = 迁移前的历史日志
+  type             Int
+  content          String   @default("")
+  username         String   @default("")
+  tokenName        String   @default("") @map("token_name")
+  modelName        String   @default("") @map("model_name")
+  quota            Int      @default(0)
+  promptTokens     Int      @default(0) @map("prompt_tokens")
+  completionTokens Int      @default(0) @map("completion_tokens")
+  useTime          Int      @default(0) @map("use_time") // ms
+  isStream         Boolean  @default(false) @map("is_stream")
+  channelId        Int?     @map("channel_id")
+  channelName      String   @default("") @map("channel_name")
+  tokenId          Int?     @map("token_id")
+  group            String   @default("")
+  ip               String   @default("")
+  requestId        String   @default("") @map("request_id")
+  other            String   @default("{}") // JSON：倍率/上游成本快照
+  createdAt        DateTime @default(now()) @map("created_at")
+  user             User     @relation(fields: [userId], references: [id])
+  // channelId / tokenId 是审计快照而非外键：渠道或令牌删除后，历史日志仍保留当时的归属
+
+  @@index([userId, createdAt])
+  @@index([tenantId, createdAt])
+  @@map("logs")
+}
+
+// 额度分配/充值审计流水：一条流水记在「某个用户在某个租户内」的余额上
+model QuotaTxn {
+  id         Int      @id @default(autoincrement())
+  userId     Int      @map("user_id")
+  tenantId   Int      @default(0) @map("tenant_id") // 0 = 迁移前的历史流水
+  type       String // TOPUP / ALLOCATE / DEDUCT / REFUND / SIGNIN
+  delta      Int
+  quotaAfter Int      @map("quota_after")
+  operatorId Int      @default(0) @map("operator_id")
+  note       String   @default("")
+  createdAt  DateTime @default(now()) @map("created_at")
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([tenantId, createdAt])
+  @@map("quota_txns")
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    String   @map("user_id")
+  action    String
+  detail    String   @default("")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, action])
+  @@map("audit_logs")
+}
+
+// 支付订单：租户向平台购买软件产品与服务——订阅、功能买断、额度包。
+// tenantId 是下单人当时所在的租户（订单主体）；userId 只是经手的租户管理员。
+model PaymentOrder {
+  id              Int      @id @default(autoincrement())
+  userId          Int      @map("user_id")
+  tenantId        Int?     @map("tenant_id") // 下单时的当前租户；null = 迁移前无租户归属的历史单
+  merchantOrderNo String   @unique @map("merchant_order_no") // 本站单号（本站在支付平台侧是商户，与租户无关）
+  platformOrderNo String   @default("") @map("platform_order_no") // chandler 侧 order_no
+  productType     String   @default("quota") @map("product_type") // subscription / feature / quota
+  productId       String   @default("") @map("product_id")
+  amountFen       Int      @default(0) @map("amount_fen") // 人民币分
+  quotaGranted    Int      @default(0) @map("quota_granted") // 履约授予的额度
+  serviceDays     Int      @default(0) @map("service_days") // 订阅服务期（天），0=不适用
+  status          String   @default("PENDING") // PENDING/PAID/FULFILLED/REFUNDED/CLOSED/FAILED
+  tradeType       String   @default("native") @map("trade_type")
+  prepayInfo      String   @default("{}") @map("prepay_info") // JSON：code_url/pay_url 等
+  paidAt          Int      @default(0) @map("paid_at")
+  refundedFen     Int      @default(0) @map("refunded_fen")
+  raw             String   @default("{}") // 平台响应留档
+  createdAt       DateTime @default(now()) @map("created_at")
+  user            User     @relation(fields: [userId], references: [id])
+  tenant          Tenant? @relation(fields: [tenantId], references: [id])
+  refunds         PaymentRefund[]
+
+  @@index([userId, status])
+  @@index([tenantId, status])
+  @@map("payment_orders")
+}
+
+model PaymentRefund {
+  id              Int      @id @default(autoincrement())
+  orderId         Int      @map("order_id")
+  merchantRefundNo String  @unique @map("merchant_refund_no")
+  amountFen       Int      @default(0) @map("amount_fen")
+  status          String   @default("SUBMITTED") // SUBMITTED/SUCCEEDED/FAILED
+  reason          String   @default("")
+  createdAt       DateTime @default(now()) @map("created_at")
+  order           PaymentOrder @relation(fields: [orderId], references: [id])
+
+  @@map("payment_refunds")
+}

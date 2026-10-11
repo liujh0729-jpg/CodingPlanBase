@@ -1,0 +1,505 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: "AlibabaSans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("//mdn.alipayobjects.com/huamei_iwk9zp/afts/file/A*2zEUQqnPNesAAAAAQtAAAAgAegCCAQ/AlibabaSans-Regular.woff2")
+    format("woff2");
+}
+
+@font-face {
+  font-family: "AlibabaSans";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("//mdn.alipayobjects.com/huamei_iwk9zp/afts/file/A*E_cxRbMlZqUAAAAAQuAAAAgAegCCAQ/AlibabaSans-Medium.woff2")
+    format("woff2");
+}
+
+/* 设计令牌 */
+:root {
+  --primary: #1677ff;
+  --primary-strong: #0958d9;
+  --primary-soft: #e6f4ff;
+  --primary-light: #91caff;
+  --secondary: #38bdf8;
+  --bg: #f5f5f5;
+  --bg-muted: #fafafa;
+  --card: #ffffff;
+  --border: #f0f0f0;
+  --border-strong: #d9d9d9;
+  --inverse: #07111f;
+  --text-1: #1f1f1f;
+  --text-2: #434343;
+  --text-3: #8c8c8c;
+  --text-4: #bfbfbf;
+  --success: #16a34a;
+  --success-soft: #e8f7ee;
+  --danger: #dc2626;
+  --danger-soft: #fdecec;
+  --warning: #d97706;
+  --warning-soft: #fdf3e3;
+  --info-soft: #e8f4fd;
+  --radius: 6px;
+  --radius-btn: 6px;
+  --radius-card: 8px;
+}
+
+html,
+body,
+#enterprise-root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  /* 工作台外壳：视口固定，滚动交给内容区，保证左侧菜单始终到底 */
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text-1);
+  font-family:
+    "Public Sans",
+    "Noto Sans SC",
+    "PingFang SC",
+    "Microsoft YaHei",
+    AlibabaSans,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.colorWeak {
+  filter: invert(80%);
+}
+
+.ant-layout {
+  min-height: 100vh;
+}
+
+/* 页头：渐变 hero + 页签气泡
+   标题与页签条同处首行（页签贴右上角），板块介绍整行落在标题下方 ——
+   页签条与介绍各占一行互不挤压（曾用左右分栏：介绍被挤成窄列、窄窗口下页签还掉到最后一行） */
+.page-hero {
+  background: linear-gradient(118deg, #f0f7ff 0%, #f0f9ff 52%, #fff 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 22px 28px;
+  margin-bottom: 22px;
+}
+
+/* 首行：标题在左、页签条与操作按钮在右上角；窄窗口下页签条整行落到第二行，不撑破 hero */
+.page-hero-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  flex-wrap: wrap;
+}
+
+.page-hero-title {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  color: var(--text-1);
+  margin: 0;
+}
+
+.page-hero-desc {
+  font-size: 12.5px;
+  color: var(--text-3);
+  margin: 18px 0 0;
+}
+
+/* 状态徽标 */
+.badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.7;
+  white-space: nowrap;
+  background: var(--bg-muted);
+  color: var(--text-3);
+  border: 1px solid var(--border);
+}
+
+.badge-green {
+  background: #e8f7ee;
+  color: #16a34a;
+  border-color: #bbf7d0;
+}
+
+.badge-orange {
+  background: #fdf3e3;
+  color: #d97706;
+  border-color: #fde68a;
+}
+
+.badge-red {
+  background: #fdecec;
+  color: #dc2626;
+  border-color: #fecaca;
+}
+
+.badge-sky {
+  background: #e8f4fd;
+  color: #0ea5e9;
+  border-color: #bae6fd;
+}
+
+.badge-blue {
+  background: #e6f4ff;
+  color: #0958d9;
+  border-color: var(--primary-light);
+}
+
+.badge-violet {
+  background: #f3e8ff;
+  color: #7c3aed;
+  border-color: #ddd6fe;
+}
+
+.badge-gray {
+  background: #fafafa;
+  color: #8c8c8c;
+  border-color: var(--border);
+}
+
+.mono {
+  font-family: "Cascadia Mono", "SF Mono", Consolas, monospace;
+}
+
+.text-12 {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.muted {
+  color: var(--text-3);
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.page-hero-side {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+
+/* 页签条：胶囊分段，放不下时整行折到第二行，
+   点击任何页签都不会移动页面或页签条本身（不滚动、不位移） */
+.tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 4px;
+  margin: 0;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+
+.tab-item {
+  border: none;
+  margin: 0;
+  padding: 7px 15px;
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--text-3);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.tab-item:hover {
+  color: var(--text-1);
+}
+
+.tab-item:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.tab-item.active {
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+}
+
+/* 面板 */
+.panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+  margin-bottom: 24px;
+  overflow: hidden;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  /* 说明放不下时整段换到标题下方，标题永不被挤压 */
+  flex-wrap: wrap;
+  padding: 18px 28px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(118deg, #fbfcff 0%, #ffffff 60%);
+}
+
+.panel-head h3 {
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.panel-badge {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+  margin-right: auto;
+}
+
+.panel-extra {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  /* 说明单独换行时，操作按钮仍靠右 */
+  margin-left: auto;
+}
+
+.panel-body {
+  padding: 22px 28px 26px;
+}
+
+/* 统计卡片 */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+}
+
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 20px 22px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+}
+
+.stat-ico {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 19px;
+  background: var(--primary-soft);
+  color: var(--primary-strong);
+  flex: 0 0 auto;
+}
+
+.stat-label {
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+.stat-value {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text-1);
+  line-height: 1.25;
+}
+
+.stat-hint {
+  font-size: 12px;
+  color: var(--text-4);
+}
+
+/* 提示条 */
+.notice {
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  font-size: 13px;
+  border: 1px solid transparent;
+  margin-bottom: 14px;
+}
+
+.notice-info {
+  background: #e8f4fd;
+  color: #075985;
+  border-color: #bae6fd;
+}
+
+.notice-warn {
+  background: #fdf3e3;
+  color: #92400e;
+  border-color: #fde68a;
+}
+
+.notice-error {
+  background: #fdecec;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+
+.notice-success {
+  background: #e8f7ee;
+  color: #166534;
+  border-color: #bbf7d0;
+}
+
+/* 空态 */
+.empty {
+  padding: 50px 20px;
+  text-align: center;
+  color: var(--text-4);
+  font-size: 13px;
+}
+
+.empty-ico {
+  font-size: 40px;
+  opacity: 0.6;
+  margin-bottom: 8px;
+}
+
+/* 表单两列栅格 */
+.form-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 18px;
+}
+
+/* 工作台：业务概况卡 */
+.biz-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 18px;
+}
+
+.biz-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: #fff;
+  padding: 14px 16px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.biz-card:hover {
+  border-color: var(--primary-light);
+  box-shadow: 0 4px 12px -2px rgba(16, 24, 40, 0.08);
+  transform: translateY(-2px);
+}
+
+.biz-ico {
+  font-size: 20px;
+}
+
+.biz-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.biz-label {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.biz-hint {
+  font-size: 12px;
+  color: var(--text-4);
+}
+
+@media (max-width: 720px) {
+  .form-2col {
+    grid-template-columns: 1fr;
+  }
+}
+
+@keyframes m-sheet-up {
+  from {
+    transform: translateY(16px);
+    opacity: 0.6;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+/* 本机 Ant Design Pro 工作台外壳。业务页面沿用上述功能样式与 Pro 蓝色令牌。 */
+.ant-pro-sider.ant-layout-sider.ant-pro-sider-fixed {
+  left: unset;
+}
+
+.enterprise-pro-layout {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.enterprise-pro-layout .ant-pro-layout,
+.enterprise-pro-layout .ant-pro-layout > .ant-layout {
+  height: 100%;
+}
+
+.enterprise-pro-layout .ant-pro-layout-container,
+.enterprise-pro-layout .ant-layout-has-sider > .ant-layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  height: 100%;
+}
+
+.enterprise-pro-layout .ant-pro-layout-content {
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.enterprise-pro-layout .ant-layout-footer,
+.enterprise-pro-layout .ant-pro-global-footer {
+  flex: 0 0 auto;
+  margin-top: auto;
+}
+
+.enterprise-footer {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(6px);
+}
+
+.enterprise-pro-layout .ant-pro-layout .ant-pro-layout-content { display: block; padding: 20px 24px 32px; overflow-y: auto; }
+.enterprise-pro-layout .ant-table-thead > tr > th { font-size: 12.5px; font-weight: 600; }
+.enterprise-pro-layout .ant-table-tbody > tr > td { font-size: 13.5px; }
+.enterprise-pro-layout .ant-pro-layout-content > .stat-grid { margin-bottom: 22px; }
+.page-hero { background: #fff; border-radius: 8px; padding: 20px 24px; }
+.page-hero-title { font-size: 24px; font-weight: 600; }
+.panel { border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,.03); }
+.panel-head { background: #fff; padding: 16px 24px; }
+.panel-body { padding: 20px 24px; }
+.stat-card { border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,.03); }

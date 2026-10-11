@@ -1,0 +1,29 @@
+{
+  "name": "codingplan-base",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "dev": "pnpm --parallel --filter codingplan-base-web --filter codingplan-base-api dev",
+    "dev:web": "pnpm --filter codingplan-base-web dev",
+    "dev:api": "pnpm --filter codingplan-base-api dev",
+    "build": "pnpm --filter codingplan-base-api build && pnpm --filter codingplan-base-web build",
+    "lint": "pnpm --recursive lint",
+    "typecheck": "pnpm --recursive typecheck",
+    "prisma:generate": "pnpm --filter codingplan-base-api prisma:generate",
+    "prisma:migrate:dev": "pnpm --filter codingplan-base-api prisma:migrate:dev",
+    "prisma:migrate:deploy": "pnpm --filter codingplan-base-api prisma:migrate:deploy",
+    "prisma:migrate:status": "pnpm --filter codingplan-base-api prisma:migrate:status",
+    "prisma:seed": "pnpm --filter codingplan-base-api prisma:seed"
+  },
+  "engines": {
+    "node": ">=24.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma"
+    ]
+  }
+}

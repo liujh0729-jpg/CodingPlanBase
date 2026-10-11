@@ -1,0 +1,113 @@
+.page {
+  min-height: 100dvh;
+  padding: 48px 24px 64px;
+  background: #f7f9fc;
+  color: #1f2937;
+  font-family: AlibabaSans, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  max-width: 880px;
+  margin: 0 auto;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.logo {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+}
+
+.title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.4px;
+}
+
+.subtitle {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.card {
+  padding: 24px 26px 26px;
+  background: #fff;
+  border: 1px solid #e8edf5;
+  border-radius: 12px;
+  box-shadow: 0 6px 18px #0f172a0d;
+}
+
+.cardTitle {
+  margin: 0 0 6px;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.hint {
+  margin: 0 0 18px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.commands {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  background: #0f172a;
+  border-radius: 10px;
+}
+
+.commands code {
+  color: #e2e8f0;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.7;
+  word-break: break-all;
+}
+
+.footerNote {
+  color: #7b8798;
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+@media (max-width: 640px) {
+  .page {
+    padding: 28px 16px 44px;
+  }
+
+  .card {
+    padding: 18px 16px 20px;
+  }
+
+  .title {
+    font-size: 20px;
+  }
+}
