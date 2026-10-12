@@ -56,7 +56,7 @@ type SessionValue = {
   isAdmin: boolean;
   /** 超级管理员（role ≥ 100）：可处置超管账号与角色阶梯顶端。 */
   isRoot: boolean;
-  /** 当前租户的管理员：管理菜单只对「这个租户里的他」开放，切租户后就换一个身份。 */
+  /** 当前租户的管理员：前台侧栏的「本租户管理」那一组只对「这个租户里的他」渲染，切租户后就换一个身份。 */
   isTenantAdmin: boolean;
   /** 已加入至少一个租户：没有租户时额度、令牌、用量都还没有记账处。 */
   hasTenant: boolean;

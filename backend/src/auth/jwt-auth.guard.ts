@@ -8,17 +8,22 @@ import { loadMemberships, pickActiveMembership } from './identity';
 import { verifyToken } from './jwt';
 
 // 健康检查、本地登录注册、chandler 联合登录/回调、支付回调（平台侧调用，无本系统令牌）
-// 前端未登录就要读的：公开配置、商品列表、模型价目表
 const PUBLIC_PATHS = [
   /^\/health(?:\/(?:ready|version))?$/,
   /^\/auth\/(login|register|refresh)$/,
   /^\/auth\/chandler(\/(authorize-url|callback|status))?$/,
   /^\/pay\/webhook$/,
+  // 安装向导必须免登录（安装时还没有任何账号）；写接口在服务端按「已有超管即 403」收口
+  /^\/install(\/(status|database|secret|schema|admin))?$/,
+];
+
+// 只有 GET 免登录：这三条是「未登录也要能读」的内容接口，同一个路径上还有写接口
+// （新增 / 改价 / 删除模型、改商品配置）。按路径整条放行的话，写口子会跟着一起敞开，
+// 只剩处理函数里的 requireAdmin 兜底——那是运气，不是设计。
+const PUBLIC_GET_PATHS = [
   /^\/pay\/products$/,
   /^\/settings\/public$/,
   /^\/gateway\/models$/,
-  // 安装向导必须免登录（安装时还没有任何账号）；写接口在服务端按「已有超管即 403」收口
-  /^\/install(\/(status|database|secret|schema|admin))?$/,
 ];
 
 // 网关转发端点自行做 sk- 令牌鉴权（见 RelayController），全局守卫放行
@@ -34,6 +39,12 @@ export class JwtAuthGuard implements CanActivate {
       .getRequest<Request & { user?: CurrentUser }>();
     const path = request.path;
     if (PUBLIC_PATHS.some((pattern) => pattern.test(path))) return true;
+    if (
+      request.method === 'GET' &&
+      PUBLIC_GET_PATHS.some((pattern) => pattern.test(path))
+    ) {
+      return true;
+    }
     if (RELAY_PATHS.some((pattern) => pattern.test(path))) return true;
     const token = bearer(request);
     if (!token) {

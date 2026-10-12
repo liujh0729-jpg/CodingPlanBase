@@ -63,7 +63,7 @@ export default function ModelsPage() {
 
       {rows.length === 0 && !loading ? (
         <Notice variant="warn">
-          价目表为空：请联系管理员在「系统设置 → AIPDD 接入」完成模型目录同步，或在「渠道管理」手动添加渠道。
+          价目表为空：请联系管理员在「模型设置 → AIPDD 接入」完成模型目录同步，或在「渠道管理」手动添加渠道。
         </Notice>
       ) : null}
 

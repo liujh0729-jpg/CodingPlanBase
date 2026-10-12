@@ -304,7 +304,41 @@ export class CatalogService implements OnApplicationBootstrap {
   }
 
   /**
-   * 定时同步：每 60 秒醒一次，现场读「目录同步间隔」（超级管理员在系统设置里改），
+   * 当前目录快照托管的模型名集合：价目表用它区分「同步托管的行」与
+   * 「手工新增 / 首次调用自动补的行」，后者才可以删、前者删了会原样回来。
+   */
+  async managedNames(): Promise<Set<string>> {
+    const snapshot = await this.prisma.catalogSnapshot.findUnique({
+      where: { id: 1 },
+    });
+    if (!snapshot) return new Set();
+    const parsed = parseCatalog(JSON.parse(snapshot.payload || '{}'));
+    return new Set(parsed.models.map((model) => model.name).filter(Boolean));
+  }
+
+  /**
+   * 删除价目表行：只放行走进快照之外的（手工新增、上游清单入库、首次调用自动补）。
+   * 目录托管的行留在这里删不掉不是偷懒——下一次同步会按快照把它原样建回来，
+   * 「删除」对它没有可观察效果，那一头该做的动作是钉价。
+   */
+  async remove(id: number) {
+    const row = await this.prisma.gatewayModel.findUnique({ where: { id } });
+    if (!row) {
+      throw new BusinessException(ErrorCode.NOT_FOUND, '模型不存在');
+    }
+    if ((await this.managedNames()).has(row.modelName)) {
+      throw new BusinessException(
+        ErrorCode.CONFLICT,
+        `${row.modelName} 由模型目录托管：删掉下一次同步就会建回来。要脱离目录价请在定价里钉住它`,
+      );
+    }
+    // 历史调用日志按 modelName 留快照，不依赖这一行存在
+    await this.prisma.gatewayModel.delete({ where: { id } });
+    return null;
+  }
+
+  /**
+   * 定时同步：每 60 秒醒一次，现场读「目录同步间隔」（超级管理员在模型设置里改），
    * 到点才真同步。这样改完间隔不必重启进程就能生效；0 表示关闭。
    */
   startScheduler() {
@@ -335,7 +369,7 @@ export class CatalogService implements OnApplicationBootstrap {
     }
   }
 
-  /** 环境变量优先（部署期锁死用），否则取系统设置；夹到 0..1440，0 = 关闭。 */
+  /** 环境变量优先（部署期锁死用），否则取模型设置；夹到 0..1440，0 = 关闭。 */
   private async intervalMinutes(): Promise<number> {
     const fromEnv = Number(process.env.AIPDD_CATALOG_SYNC_INTERVAL_MINUTES);
     const value = Number.isFinite(fromEnv)

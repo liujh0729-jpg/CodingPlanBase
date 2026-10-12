@@ -33,8 +33,6 @@ import {
   ADMIN_PATH_PREFIX,
   adminRouteFor,
   baseRouteFor,
-  consoleRouteFor,
-  CONSOLE_PATH,
   type BaseRoute,
 } from "@/config/routes";
 import { PRODUCT_NAME } from "@/lib/brand";
@@ -132,26 +130,23 @@ export function EnterpriseProLayout({ children }: { children: ReactNode }) {
     useSession();
   const [settings, setSettings] = useState<ProLayoutProps>(defaultSettings);
   const [pathnameReady, setPathnameReady] = useState(false);
-  // 三区按「路径前缀 + 身份」判定：同一张 user 表只是权限分级，高一层就多一个自己的管理区域。
+  // 两区按「路径前缀 + 身份」判定：平台后台是一棵独立菜单树，其余（含 `/console/*`）都在前台这一棵树里。
   // 深链到不属于当前身份的区时不渲染该区菜单，只看到前台导航。
   const isPlatformArea =
     pathname.startsWith(ADMIN_PATH_PREFIX) && Boolean(isAdmin);
-  const isConsoleArea = pathname.startsWith(CONSOLE_PATH) && isTenantAdmin;
 
-  // 身份决定可见性：非管理员不渲染平台后台菜单；后台内部再按板块 minRole 过滤（系统设置＝超管）；
-  // 管理菜单只对「当前租户的管理员」渲染，且进去后整棵侧栏换成租户这一层的板块；
-  // 前台的「订购管理」对租户管理员与平台管理员 / 超管都渲染（前者下单，后者看全平台单据）
+  // 身份决定可见性：非管理员不渲染平台后台菜单；后台内部再按板块 minRole 过滤（模型设置＝超管）；
+  // 租户那一层的管理动作不另开区、不进顶栏，就是前台侧栏里按「当前租户里的角色」多出的那一组
+  // （`baseRouteFor` 的「本租户管理」组，role=5 才渲染；切租户后按新租户的角色重算）。
   const menuTree = isPlatformArea
     ? adminRouteFor(isRoot)
-    : isConsoleArea
-      ? consoleRouteFor()
-      : baseRouteFor({ canOrder });
+    : baseRouteFor({ canOrder, canManageTenant: isTenantAdmin });
   // 换区或换租户时整棵内容树都被重建：租户是记账上下文，切过去以后每个板块都要按新租户重新取数，
   // 只靠 ProLayout 自己在挂载时生成的侧栏菜单会停在上一区（客户端跳转才会暴露）；
   // 各板块的列表态留在组件里，不重挂就会看到上一个租户的数据。
-  const areaKey = `${
-    isPlatformArea ? "platform" : isConsoleArea ? "console" : "front"
-  }:${me?.tenantId ?? 0}`;
+  const areaKey = `${isPlatformArea ? "platform" : "front"}:${
+    me?.tenantId ?? 0
+  }`;
   const menuRoute = withRouteIcons(menuTree);
   const activePath = menuActivePath(menuTree, pathname);
 
@@ -180,7 +175,7 @@ export function EnterpriseProLayout({ children }: { children: ReactNode }) {
       <ProLayout
         key={areaKey}
         {...settings}
-        // 三棵菜单树的顶层都是「分组」（AI 服务 / 设置 / 平台管理后台 / 管理菜单），不是可导航节点。
+        // 两棵菜单树的顶层都是「分组」（前台：AI 服务 / 本租户管理 / 设置；后台：平台管理后台），不是可导航节点。
         // 默认 sub 模式会把分组渲染成可折叠 submenu：折叠分组的子项根本不在 DOM 里，
         // 用户返回前台就看到一个光秃秃的「设置」标题，误以为菜单丢了——这里固定用 group 模式常驻展开。
         menu={{ type: "group" }}
@@ -229,25 +224,20 @@ export function EnterpriseProLayout({ children }: { children: ReactNode }) {
           // 顶栏第一件事是「现在在哪个租户里记账」：一个账号可属多个租户，切过去以后
           // 额度、令牌、用量、账单都按那一个租户算；没有租户身份时这里就是创建/加入引导。
           const actions: ReactNode[] = [<TenantSwitcher key="tenant" />];
-          // 前台 ↔ 本层管理入口的切换：平台管理员切「管理后台」，租户管理员切「管理菜单」，
-          // 已在管理区内则切回前台。
-          const area = isPlatformArea
-            ? { label: "返回前台", path: "/", icon: <AppstoreOutlined /> }
-            : isAdmin
-              ? { label: "管理后台", path: ADMIN_PATH_PREFIX, icon: <AppstoreOutlined /> }
-              : isConsoleArea
-                ? { label: "返回前台", path: "/", icon: <ShopOutlined /> }
-                : isTenantAdmin
-                  ? {
-                      label: "管理菜单",
-                      path: CONSOLE_PATH,
-                      icon: <ShopOutlined />,
-                    }
-                  : null;
-          if (area) {
+          // 顶栏只留「平台管理后台」这一层的进出：它是真正另起一棵菜单树的区。
+          // 租户那一层的管理动作不在顶栏出现——它并入前台侧栏的「本租户管理」分组，
+          // 由当前租户里的角色决定渲不渲染，用户不需要「切换区域」就能管自家成员。
+          if (isAdmin) {
+            const area = isPlatformArea
+              ? { label: "返回前台", path: "/", icon: <AppstoreOutlined /> }
+              : {
+                  label: "管理后台",
+                  path: ADMIN_PATH_PREFIX,
+                  icon: <AppstoreOutlined />,
+                };
             actions.push(
               <a
-                key="area"
+                key={area.label}
                 style={{ color: "inherit" }}
                 onClick={(event) => {
                   event.preventDefault();
@@ -279,17 +269,8 @@ export function EnterpriseProLayout({ children }: { children: ReactNode }) {
                     label: "用量与额度",
                     onClick: () => router.push("/usage"),
                   },
-                  // 租户这一层的管理入口，只有租户管理员看得到
-                  ...(isTenantAdmin
-                    ? [
-                        {
-                          key: "console",
-                          icon: <ShopOutlined />,
-                          label: "管理菜单",
-                          onClick: () => router.push(CONSOLE_PATH),
-                        },
-                      ]
-                    : []),
+                  // 租户这一层的管理动作不在这里出现：它们是前台侧栏「本租户管理」那一组，
+                  // 头像菜单只留个人项（与侧栏同源，不再给第二个入口）
                   { type: "divider" },
                   {
                     key: "logout",

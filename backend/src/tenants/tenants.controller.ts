@@ -151,7 +151,7 @@ export class AdminTenantsController {
     );
   }
 
-  /** 建一个新账号并直接设为该租户的管理员（登录后在当前租户进管理菜单）。 */
+  /** 建一个新账号并直接设为该租户的管理员（登录后在前台侧栏看到「本租户管理」）。 */
   @Post(':id/admins')
   async createAdmin(
     @Current() user: CurrentUser,
@@ -215,7 +215,7 @@ export class AdminTenantsController {
 }
 
 /**
- * 租户管理菜单（当前租户内角色 5，`/console/*`）：租户对自己成员的管理 + 额度池视图。
+ * 本租户管理（当前租户内角色 5，`/console/*`）：租户对自己成员的管理 + 额度池视图。
  * 租户身份一律从会话的「当前租户」推出，接口不接受前端传入 tenantId。
  */
 @Controller('console')

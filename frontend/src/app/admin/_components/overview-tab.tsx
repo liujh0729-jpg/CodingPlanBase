@@ -122,11 +122,11 @@ export function OverviewTab() {
               尚未配置上游 AIPDD API Key，模型目录为空。
               {isRoot ? (
                 <Link href="/admin/settings" style={{ marginLeft: 6 }}>
-                  前往「系统设置 → AIPDD 接入」
+                  前往「模型设置 → AIPDD 接入」
                 </Link>
               ) : (
                 <span style={{ marginLeft: 6 }}>
-                  「系统设置」板块只开放给超级管理员，请联系超级管理员完成接入。
+                  「模型设置」板块只开放给超级管理员，请联系超级管理员完成接入。
                 </span>
               )}
             </Notice>

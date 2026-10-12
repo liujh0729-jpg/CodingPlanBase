@@ -280,7 +280,7 @@ export class TenantsService {
     return this.users.listUsers(page, pageSize, offset, keyword, tenantId);
   }
 
-  /** 平台侧为租户建一个账号并直接设为租户管理员（登录后在当前租户进管理菜单）。 */
+  /** 平台侧为租户建一个账号并直接设为租户管理员（登录后在前台侧栏看到「本租户管理」）。 */
   async createTenantAdmin(
     operator: { role: number },
     tenantId: number,
@@ -373,7 +373,7 @@ export class TenantsService {
     if (user.memberRole !== MEMBER_ROLE_ADMIN) {
       throw new BusinessException(
         ErrorCode.ROLE_MISMATCH,
-        '管理菜单仅该租户的管理员可访问',
+        '本租户管理（用户管理 / 模型使用记录）仅该租户的管理员可访问',
       );
     }
     return this.mustGet(user.tenantId);

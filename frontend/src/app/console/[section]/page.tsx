@@ -10,9 +10,9 @@ import { ConsoleUsersTab } from "../_components/console-users-tab";
 import { useConsoleOverview } from "../_components/use-console-overview";
 
 /**
- * 管理菜单板块页（`/console/<板块>`）：与平台侧 `/admin/<板块>` 同构——板块由侧栏菜单切换，
- * 菜单与 hero 文案同源于 `CONSOLE_SECTIONS`。租户管理员是权限更高的 User，
- * 前台菜单照旧，这里是租户这一层的管理菜单。
+ * 本租户管理板块页（`/console/<板块>`）：与平台侧 `/admin/<板块>` 同构——板块由侧栏菜单切换，
+ * 菜单与 hero 文案同源于 `CONSOLE_SECTIONS`。租户管理员是权限更高的 User：
+ * 这些板块直接长在前台侧栏的「本租户管理」分组里，不另开区域、不进顶栏。
  */
 export default function ConsoleSectionPage() {
   const params = useParams<{ section: string }>();
@@ -22,7 +22,7 @@ export default function ConsoleSectionPage() {
   const { overview, reload } = useConsoleOverview(isTenantAdmin, me?.tenantId ?? null);
 
   // 深链直达也要按身份收口：非本租户管理员不渲染任何板块（接口另有 20002，界面本来就不该出现）
-  if (loading) return <Panel title="管理菜单">正在确认身份…</Panel>;
+  if (loading) return <Panel title="本租户管理">正在确认身份…</Panel>;
   if (!isTenantAdmin) {
     // 租户内权限是「这个人在这家租户里」的角色：在别的租户当管理员，切过去才算
     const adminElsewhere = (me?.tenants ?? []).some(
@@ -34,10 +34,10 @@ export default function ConsoleSectionPage() {
           icon="🔒"
           text={
             isAdmin
-              ? "管理菜单只给租户管理员使用；平台侧请从顶栏「管理后台」进入。"
+              ? "「用户管理 / 模型使用记录」只给这个租户的管理员用；平台侧的对应板块在顶栏「管理后台」里（账号管理 / 全平台日志）。"
               : adminElsewhere
-                ? "你在当前租户只是成员。顶栏切到你当管理员的那个租户，管理菜单就在那边。"
-                : "管理菜单仅该租户的管理员可访问，普通用户请在「工作台 / 用量与额度」查看自己的额度。"
+                ? "你在当前租户只是成员。用顶栏切到你当管理员的那个租户，侧栏就会出现「本租户管理」那一组。"
+                : "这一组只对该租户的管理员渲染，普通用户请在「工作台 / 用量与额度」查看自己的额度。"
           }
         />
       </Panel>
@@ -49,7 +49,7 @@ export default function ConsoleSectionPage() {
       <Panel title="板块不存在">
         <EmptyState
           icon="🧭"
-          text={`管理菜单没有「${section}」这个板块，请从左侧菜单进入。`}
+          text={`本租户管理没有「${section}」这个板块，请从左侧菜单进入。`}
         />
       </Panel>
     );

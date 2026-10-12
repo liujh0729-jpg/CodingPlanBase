@@ -808,6 +808,81 @@ export class UsersService {
     return { list, total, page, pageSize };
   }
 
+  /**
+   * 全平台额度流水台账（管理员）：额度记在「这个人在某个租户里」的成员身份上，
+   * 所以每一笔都要看得出动的是谁的、哪个租户的份额、由谁操作，平台侧才核对得出账目。
+   * 用户名 / 租户名按当页去重后批量取，不做全库联表。
+   */
+  async quotaTxnLedger(
+    page: number,
+    pageSize: number,
+    offset: number,
+    filter: {
+      userId?: number;
+      tenantId?: number;
+      type?: string;
+      keyword: string;
+      since?: Date;
+    },
+  ) {
+    const where: Prisma.QuotaTxnWhereInput = {
+      ...(filter.userId ? { userId: filter.userId } : {}),
+      ...(filter.tenantId === undefined ? {} : { tenantId: filter.tenantId }),
+      ...(filter.type ? { type: filter.type } : {}),
+      ...(filter.since ? { createdAt: { gte: filter.since } } : {}),
+      ...(filter.keyword
+        ? {
+            OR: [
+              { user: { username: { contains: filter.keyword } } },
+              { user: { displayName: { contains: filter.keyword } } },
+              { note: { contains: filter.keyword } },
+            ],
+          }
+        : {}),
+    };
+    const [rows, total, sums] = await Promise.all([
+      this.prisma.quotaTxn.findMany({
+        where,
+        orderBy: { id: 'desc' },
+        skip: offset,
+        take: pageSize,
+      }),
+      this.prisma.quotaTxn.count({ where }),
+      this.prisma.quotaTxn.aggregate({ where, _sum: { delta: true } }),
+    ]);
+    const userIds = [
+      ...new Set(rows.flatMap((row) => [row.userId, row.operatorId])),
+    ].filter((id) => id > 0);
+    const [people, tenants] = await Promise.all([
+      this.prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, username: true, displayName: true },
+      }),
+      this.prisma.tenant.findMany({
+        where: { id: { in: [...new Set(rows.map((row) => row.tenantId))] } },
+        select: { id: true, name: true },
+      }),
+    ]);
+    const names = new Map(
+      people.map((row) => [row.id, row.displayName || row.username]),
+    );
+    const tenantNames = new Map(tenants.map((row) => [row.id, row.name]));
+    return {
+      list: rows.map((row) => ({
+        ...row,
+        username: names.get(row.userId) || `#${row.userId}`,
+        tenantName: row.tenantId ? tenantNames.get(row.tenantId) || '' : '',
+        operatorName: row.operatorId
+          ? names.get(row.operatorId) || `#${row.operatorId}`
+          : '',
+      })),
+      total,
+      page,
+      pageSize,
+      delta: sums._sum.delta || 0,
+    };
+  }
+
   /** 我的成员身份（切租户控件用）：停用中的租户也列出来，切换时由服务端点名拒绝。 */
   async myTenants(uid: number) {
     const rows = await this.prisma.tenantMember.findMany({
@@ -903,7 +978,7 @@ export class UsersService {
     }
   }
 
-  /** 影响全平台计费口径 / 上游密钥的动作收给超管，和「系统设置」板块同一门槛。 */
+  /** 影响全平台计费口径 / 上游密钥的动作收给超管，和「模型设置」板块同一门槛。 */
   requireRoot(user: { role: number }) {
     if (user.role < ROLE_ROOT) {
       throw new BusinessException(ErrorCode.ROLE_MISMATCH, '需要超级管理员权限');

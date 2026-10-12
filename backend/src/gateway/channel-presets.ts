@@ -204,7 +204,7 @@ export const CHANNEL_PRESETS: ChannelPreset[] = [
     protocol: 'openai',
     baseUrl: 'https://api.aipdd.work',
     apiPrefix: DEFAULT_API_PREFIX,
-    keyHint: '由「系统设置 → AIPDD 接入」自动创建与维护，一般不需要手建',
+    keyHint: '由「模型设置 → AIPDD 接入」自动创建与维护，一般不需要手建',
     website: '',
     creatable: false,
   },

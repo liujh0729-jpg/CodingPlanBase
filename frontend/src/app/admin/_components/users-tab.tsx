@@ -53,7 +53,7 @@ type QuotaValues = { tenantId: number; delta: number; note?: string };
  * 账号管理：全平台账号的建号、检索、启停与身份调整。
  * 额度记在「这个人在这家租户里」的成员身份上，同一个人跨租户各有一份，
  * 所以这里看额度必须先点名租户：按租户筛时列里就是那一份，不筛时给全部租户的合计。
- * 租户内的权限（成员 / 管理员）与启停属租户自己的管理菜单，平台只在「租户管理」里开人和补加成员。
+ * 租户内的权限（成员 / 管理员）与启停属租户自己那一层（成员侧栏的「本租户管理」），平台只在「租户管理」里开人和补加成员。
  */
 export function UsersTab() {
   const { message, modal } = App.useApp();
@@ -234,7 +234,7 @@ export function UsersTab() {
       <Panel title="账号列表"
         titleBadge={
           <span className="text-12 muted">
-            共 {rows?.total ?? 0} 个账号 · 额度单位与人民币换算见「系统设置」
+            共 {rows?.total ?? 0} 个账号 · 额度单位与人民币换算见「模型设置」
           </span>
         }
         extra={
@@ -554,7 +554,7 @@ export function UsersTab() {
           <Form.Item name="email" label="邮箱" rules={[{ type: "email", message: "邮箱格式不正确" }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="role" label="全局身份" extra="不能授予高于自己的身份；超级管理员仅超管本人可调整。租户内的权限请在「租户管理 → 下钻」或该租户的管理菜单里设定">
+          <Form.Item name="role" label="全局身份" extra="不能授予高于自己的身份；超级管理员仅超管本人可调整。租户内的权限请在「租户管理 → 下钻」或该租户里的「用户管理」设定">
             <Select options={roleOptions} />
           </Form.Item>
           <Form.Item

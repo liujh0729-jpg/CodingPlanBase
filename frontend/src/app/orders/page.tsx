@@ -33,7 +33,7 @@ export default function OrdersPage() {
       <Panel title="无访问权限">
         <EmptyState
           icon="🔒"
-          text="订购管理是租户对平台的交易，普通用户不参与；你的额度由本租户管理员在「管理菜单 → 用户管理」划拨。"
+          text="订购管理是租户对平台的交易，普通用户不参与；你的额度由本租户管理员在「本租户管理 → 用户管理」划拨。"
         />
       </Panel>
     );

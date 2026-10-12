@@ -31,7 +31,7 @@ export class CurrentUser {
     return this.role >= ROLE_ROOT;
   }
 
-  /** 租户管理菜单（用户管理 / 模型使用记录 / 对平台订购）的门槛：当前租户内的角色 5。 */
+  /** 本租户管理（用户管理 / 模型使用记录 / 对平台订购）的门槛：当前租户内的角色 5。 */
   isTenantAdmin(): boolean {
     return this.tenantId !== null && this.memberRole === MEMBER_ROLE_ADMIN;
   }

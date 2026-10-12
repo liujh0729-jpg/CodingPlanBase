@@ -173,7 +173,7 @@ export function TenantsTab() {
       message.error(payload.message);
       return;
     }
-    message.success("租户管理员已开通，可用该账号登录进「管理菜单」");
+    message.success("租户管理员已开通：该账号登录后，前台侧栏会出现「本租户管理」");
     setAdminFor(null);
     adminForm.resetFields();
     await load();
@@ -208,13 +208,13 @@ export function TenantsTab() {
     <>
       <Notice variant="info">
         口径：租户＝平台交付给 B 端客户的独立工作区。平台在这里管租户（开通、启停、额度池、
-        成员与管理员）；租户管理员在「管理菜单」里管自家成员。一个账号可以同时属于多个租户，
+        成员与管理员）；租户管理员在自家前台侧栏的「本租户管理」里管自己的人和额度。一个账号可以同时属于多个租户，
         在每个租户里各有一份额度和一档租户内权限（成员 / 管理员）。
       </Notice>
 
       <Panel title="租户列表"
         titleBadge={
-          <span className="text-12 muted">共 {rows?.total ?? 0} 个租户 · 额度单位与人民币换算见「系统设置」</span>
+          <span className="text-12 muted">共 {rows?.total ?? 0} 个租户 · 额度单位与人民币换算见「模型设置」</span>
         }
         extra={
           <Space size={8} wrap>
@@ -501,7 +501,7 @@ export function TenantsTab() {
         </Form>
         <Notice variant="info">
           新建的是一个全局身份为「普通用户」的账号，同时把它加入本租户并把租户内权限设为「管理员」：
-          登录后切到这个租户就能看到「管理菜单」，从租户额度池给自家成员发额度、管成员。
+          登录后切到这个租户就能看到侧栏的「本租户管理」，从租户额度池给自家成员发额度、管成员。
           额度池仍由平台在这里划拨。
         </Notice>
       </Modal>
@@ -583,7 +583,7 @@ function TenantDetailModal({
     onChanged();
   };
 
-  /** 租户内权限只有一档「管理员」能进管理菜单；改的是成员身份，不动他的全局账号身份。 */
+  /** 租户内权限只有一档「管理员」能拿到前台侧栏的「本租户管理」那一组；改的是成员身份，不动他的全局账号身份。 */
   const setMemberRole = (row: AccountRow, next: number) => {
     modal.confirm({
       title:
@@ -592,8 +592,8 @@ function TenantDetailModal({
           : `在 ${tenant?.name ?? "该租户"} 降为成员`,
       content:
         next === MEMBER_ROLE_ADMIN
-          ? "该成员登录并切到这个租户后，可进入「管理菜单」管理自家成员与额度池分配。"
-          : "降为成员后，这个租户的管理菜单对他立即不可见；他在其他租户里的身份不受影响。",
+          ? "该成员登录并切到这个租户后，前台侧栏出现「本租户管理」，可管自家成员与额度池分配。"
+          : "降为成员后，这个租户的「本租户管理」菜单对他立即消失；他在其他租户里的身份不受影响。",
       okText: "确认",
       cancelText: "取消",
       onOk: async () => {

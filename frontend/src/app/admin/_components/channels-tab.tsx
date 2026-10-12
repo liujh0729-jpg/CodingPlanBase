@@ -1,6 +1,16 @@
 "use client";
 
-import { App, Button, Form, Input, InputNumber, Modal, Select, Table } from "antd";
+import {
+  App,
+  Button,
+  Checkbox,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Select,
+  Table,
+} from "antd";
 import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState, Notice, Panel } from "@/components/ui/panel";
@@ -65,6 +75,7 @@ function jsonRule(label: string, stringValuesOnly = false) {
 /**
  * 渠道管理：上游标准模板（OpenAI / DeepSeek / 火山方舟 / 通义 / 智谱 / Anthropic…，
  * 编号与默认地址由后端 /gateway/channels/presets 下发）、从上游拉取模型清单、
+ * 拉取后勾选入库价目表并并进本渠道模型清单、
  * 选路池（优先级分层 + 层内权重随机 + 多密钥轮换）、密钥被拒时换 key、
  * 渠道故障时换下一个渠道、连通性测试与自动禁用、模型重定向与参数/请求头覆盖。
  */
@@ -77,6 +88,14 @@ export function ChannelsTab() {
   const [creating, setCreating] = useState(false);
   const [testing, setTesting] = useState<number | null>(null);
   const [pulling, setPulling] = useState(false);
+  const [importing, setImporting] = useState<ChannelRow | null>(null);
+  const [importList, setImportList] = useState<{ name: string; known: boolean }[]>(
+    [],
+  );
+  const [importPicked, setImportPicked] = useState<string[]>([]);
+  const [importPath, setImportPath] = useState("");
+  const [pullingList, setPullingList] = useState(false);
+  const [importSaving, setImportSaving] = useState(false);
   const [form] = Form.useForm<ChannelValues>();
   const presetKey = Form.useWatch("presetKey", form);
   const pickedPreset = presets.find((item) => item.key === presetKey) || null;
@@ -189,6 +208,67 @@ export function ChannelsTab() {
     setEditing(null);
     setCreating(false);
     await load();
+  };
+
+  /**
+   * 上游清单入库：拉回来的模型直接建进价目表（0 价待定价），并把这个模型名并进本渠道的模型清单。
+   * 只在编辑渠道里填 models 是不够的——价目表没这一行时计费按 0 放行，等于白送。
+   */
+  const openImport = async (row: ChannelRow) => {
+    setImporting(row);
+    setImportList([]);
+    setImportPicked([]);
+    setPullingList(true);
+    try {
+      const [fetched, catalog] = await Promise.all([
+        postJson<{ models: string[]; modelsPath: string }>(
+          `/gateway/channels/${row.id}/fetch-models`,
+          {},
+        ),
+        api<{ models: { modelName: string }[] }>("/gateway/models"),
+      ]);
+      if (fetched.code !== 0) {
+        message.error(fetched.message || "上游没有返回模型清单");
+        setImporting(null);
+        return;
+      }
+      const names = fetched.data?.models ?? [];
+      const known = new Set(
+        (catalog.data?.models ?? []).map((item) => item.modelName),
+      );
+      setImportPath(fetched.data?.modelsPath ?? "");
+      setImportList(names.map((name) => ({ name, known: known.has(name) })));
+      // 默认勾上还没进价目表的那些：已在的重复入库没有意义
+      setImportPicked(names.filter((name) => !known.has(name)).slice(0, 500));
+    } finally {
+      setPullingList(false);
+    }
+  };
+
+  const submitImport = async () => {
+    if (!importing || importPicked.length === 0) return;
+    setImportSaving(true);
+    try {
+      const payload = await postJson<{
+        created: number;
+        existed: number;
+        channelModels: number;
+      }>("/gateway/models/import", {
+        channelId: importing.id,
+        models: importPicked,
+      });
+      if (payload.code !== 0) {
+        message.error(payload.message);
+        return;
+      }
+      message.success(
+        `已入库 ${payload.data?.created ?? 0} 个模型（${payload.data?.existed ?? 0} 个原本就在价目表），本渠道模型清单现为 ${payload.data?.channelModels ?? 0} 个`,
+      );
+      setImporting(null);
+      await load();
+    } finally {
+      setImportSaving(false);
+    }
   };
 
   const setStatus = async (row: ChannelRow, status: number) => {
@@ -360,6 +440,9 @@ export function ChannelsTab() {
                       onClick={() => void test(row)}
                     >
                       测试
+                    </Button>
+                    <Button size="small" onClick={() => void openImport(row)}>
+                      拉取入库
                     </Button>
                     <Button
                       size="small"
@@ -587,6 +670,75 @@ export function ChannelsTab() {
             </Form.Item>
           </div>
         </Form>
+      </Modal>
+
+      <Modal
+        title={`拉取上游模型入库 · ${importing?.name || ""}`}
+        open={Boolean(importing)}
+        width={620}
+        onCancel={() => setImporting(null)}
+        destroyOnHidden
+        footer={[
+          <Button
+            key="all"
+            disabled={importList.every((item) => item.known)}
+            onClick={() =>
+              setImportPicked(
+                importList
+                  .filter((item) => !item.known)
+                  .map((item) => item.name)
+                  .slice(0, 500),
+              )
+            }
+          >
+            全选未入库
+          </Button>,
+          <Button
+            key="none"
+            disabled={importPicked.length === 0}
+            onClick={() => setImportPicked([])}
+          >
+            清空
+          </Button>,
+          <Button key="cancel" onClick={() => setImporting(null)}>
+            取消
+          </Button>,
+          <Button
+            key="ok"
+            type="primary"
+            loading={importSaving}
+            disabled={importPicked.length === 0}
+            onClick={() => void submitImport()}
+          >
+            入库所选（{importPicked.length}）
+          </Button>,
+        ]}
+      >
+        <div className="text-12 muted" style={{ marginBottom: 8 }}>
+          {pullingList
+            ? "正在读取上游模型清单…"
+            : `清单来自 ${importPath || "/v1/models"}。勾中的模型会建进价目表（先落 0 价，等定价或目录同步补价），同时并入本渠道的模型清单——两头都补齐了才调得通。`}
+        </div>
+        {importList.length === 0 && !pullingList ? (
+          <EmptyState icon="📭" text="上游没有返回可识别的模型清单。" />
+        ) : (
+          <Checkbox.Group
+            value={importPicked}
+            onChange={(values) => setImportPicked(values as string[])}
+            style={{ display: "block", maxHeight: 320, overflowY: "auto" }}
+          >
+            <div style={{ display: "grid", gap: 4 }}>
+              {importList.map((item) => (
+                <Checkbox key={item.name} value={item.name} disabled={item.known}>
+                  <span className="mono text-12">{item.name}</span>
+                  {item.known ? (
+                    <span className="text-12 muted"> · 已在价目表</span>
+                  ) : null}
+                </Checkbox>
+              ))}
+            </div>
+          </Checkbox.Group>
+        )}
       </Modal>
     </>
   );

@@ -10,7 +10,7 @@ import { DEFAULTS, SettingsService } from './settings.service';
 const EDITABLE = new Set(Object.keys(DEFAULTS));
 
 /**
- * 写入权限按「哪个板块在写」收口：系统设置是超级管理员的板块，
+ * 写入权限按「哪个板块在写」收口：模型设置是超级管理员的板块，
  * 其中的额度换算、零售倍率、目录来源密钥一旦改错会影响全平台计费；
  * 只有支付相关键跟着「支付管理」板块（平台管理员可见）开放。
  */

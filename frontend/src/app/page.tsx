@@ -49,14 +49,14 @@ type Step = {
   desc: string;
   href: string;
   cta: string;
-  /** 需要超管身份的管理动作（对应「系统设置」板块门槛），其他身份不渲染这个入口。 */
+  /** 需要超管身份的管理动作（对应「模型设置」板块门槛），其他身份不渲染这个入口。 */
   rootOnly?: boolean;
 };
 
 const STEPS: Step[] = [
   {
     title: "接入上游模型目录",
-    desc: "超级管理员在「系统设置」粘贴 AIPDD API Key，一键拉取全部模型并生成托管渠道。",
+    desc: "超级管理员在「模型设置」粘贴 AIPDD API Key，一键拉取全部模型并生成托管渠道。",
     href: "/admin/settings",
     cta: "前往设置",
     rootOnly: true,
@@ -114,7 +114,7 @@ export default function Home() {
 
   const perUnit = wallet?.quotaPerUnit || 500000;
 
-  // 引导按身份收口：非超管没有「系统设置」这一步，标题步数跟着实际条数走
+  // 引导按身份收口：非超管没有「模型设置」这一步，标题步数跟着实际条数走
   const steps = STEPS.filter((step) => !step.rootOnly || isRoot);
 
   const copyExample = async () => {
@@ -178,8 +178,8 @@ export default function Home() {
             <Notice variant="warn">
               网关还没有可用模型：
               {isRoot
-                ? " 请到「系统设置 → AIPDD 接入」粘贴 API Key 完成目录同步。"
-                : " 上游接入由超级管理员在「系统设置」完成，请联系超管后再创建令牌。"}
+                ? " 请到「模型设置 → AIPDD 接入」粘贴 API Key 完成目录同步。"
+                : " 上游接入由超级管理员在「模型设置」完成，请联系超管后再创建令牌。"}
             </Notice>
           ) : null}
           <div className="biz-grid" style={{ marginTop: 12 }}>

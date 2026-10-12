@@ -493,7 +493,7 @@ export default function InstallPage() {
           <section className={styles.card}>
             <h2 className={styles.cardTitle}>创建第一个超级管理员</h2>
             <p className={styles.hint}>
-              这个角色管理租户、渠道与系统设置。建好之后安装向导立即关闭：再点这些入口会返回
+              这个角色管理租户、渠道与模型设置。建好之后安装向导立即关闭：再点这些入口会返回
               「系统已安装」，系统控制权不会第二次交出去。
             </p>
             <Form<{ username: string; password: string; displayName?: string; confirmPassword: string }>

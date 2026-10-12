@@ -12,6 +12,7 @@ import { Current } from '../auth/current-user.decorator';
 import { CurrentUser } from '../auth/current-user';
 import { ok, pageParam, text } from '../common/api';
 import { parseId } from '../common/parse-id';
+import { Prisma } from '../../generated/prisma';
 import { UsersService } from '../users/users.service';
 import { CatalogService } from './catalog.service';
 import { ChannelsService } from './channels.service';
@@ -165,23 +166,149 @@ export class ModelsController {
     private readonly users: UsersService,
     private readonly settings: SettingsService,
     private readonly catalog: CatalogService,
+    private readonly channels: ChannelsService,
   ) {}
 
   /** 定价页数据：模型 + 换算参数（元 / 额度）。 */
   @Get('models')
   async list() {
-    const rows = await this.prisma.gatewayModel.findMany({
-      orderBy: { id: 'asc' },
-    });
-    const perUnit = await this.settings.getNumber('quota_per_unit');
+    const [rows, perUnit, managed] = await Promise.all([
+      this.prisma.gatewayModel.findMany({ orderBy: { id: 'asc' } }),
+      this.settings.getNumber('quota_per_unit'),
+      this.catalog.managedNames(),
+    ]);
     return ok({
       quotaPerUnit: perUnit,
       models: rows.map((row) => ({
         ...row,
         priceCnyPerMIn: row.modelRatio,
         priceCnyPerMOut: row.modelRatio * row.completionRatio,
+        // 目录托管的行删不掉（删了会同步回来），界面就不给这个按钮
+        deletable: !managed.has(row.modelName),
       })),
     });
+  }
+
+  /**
+   * 手工新增模型：`modelName` 是选路与计费的唯一键，重名直接拒（不静默改价）。
+   * 来源记 `manual`，目录同步不会覆盖这一行——手工定的价就该一直是手工定的价。
+   */
+  @Post('models')
+  async create(
+    @Current() user: CurrentUser,
+    @Body() body: Record<string, unknown>,
+  ) {
+    this.users.requireAdmin(user);
+    const modelName = text(body.modelName).trim();
+    if (!modelName) {
+      throw new BusinessException(ErrorCode.VALIDATION_ERROR, '模型名不能为空');
+    }
+    if (modelName.length > 120) {
+      throw new BusinessException(ErrorCode.VALIDATION_ERROR, '模型名最长 120 个字符');
+    }
+    if (await this.prisma.gatewayModel.findUnique({ where: { modelName } })) {
+      throw new BusinessException(
+        ErrorCode.CONFLICT,
+        `模型 ${modelName} 已在价目表里，请直接改定价`,
+      );
+    }
+    const row = await this.prisma.gatewayModel.create({
+      data: {
+        modelName,
+        quotaType: Number(body.quotaType) === 1 ? 1 : 0,
+        modelRatio: ModelsController.num(body.modelRatio, 0),
+        completionRatio: ModelsController.num(body.completionRatio, 1),
+        cacheReadRatio: ModelsController.num(body.cacheReadRatio, 0),
+        cacheWriteRatio: ModelsController.num(body.cacheWriteRatio, 0),
+        callCnyPrice: ModelsController.num(body.callCnyPrice, 0),
+        groupRatio: ModelsController.num(body.groupRatio, 1),
+        enableGroups: text(body.enableGroups).trim() || 'default',
+        endpoints: text(body.endpoints).trim() || 'chat',
+        description: text(body.description).trim(),
+        priceSource: 'manual',
+      },
+    });
+    return ok(row);
+  }
+
+  /**
+   * 上游模型清单入库：勾哪些建哪些（价目表先落 0 价待定价），并把这些模型名并进该渠道的
+   * 可选清单——只建价目表不接渠道，调用照样选不出路，这一步就白做。
+   * 来源记 `auto`：这类行由目录同步接管，AIPDD 目录里有同名模型时会自动换成真价。
+   */
+  @Post('models/import')
+  async importModels(
+    @Current() user: CurrentUser,
+    @Body() body: Record<string, unknown>,
+  ) {
+    this.users.requireAdmin(user);
+    const channelId = parseId(text(body.channelId), '渠道 ID');
+    const channel = await this.prisma.channel.findUnique({
+      where: { id: channelId },
+    });
+    if (!channel) {
+      throw new BusinessException(ErrorCode.NOT_FOUND, '渠道不存在');
+    }
+    const picked = Array.isArray(body.models)
+      ? [...new Set(body.models.map((item) => text(item).trim()).filter(Boolean))]
+      : [];
+    if (picked.length === 0) {
+      throw new BusinessException(ErrorCode.VALIDATION_ERROR, '没有勾选要入库的模型');
+    }
+    if (picked.length > 500) {
+      throw new BusinessException(
+        ErrorCode.VALIDATION_ERROR,
+        '一次最多入库 500 个模型，请分批勾选',
+      );
+    }
+    const known = await this.prisma.gatewayModel.findMany({
+      where: { modelName: { in: picked } },
+      select: { modelName: true },
+    });
+    const knownNames = new Set(known.map((row) => row.modelName));
+    const created = await this.prisma.gatewayModel.createMany({
+      data: picked
+        .filter((modelName) => !knownNames.has(modelName))
+        .map((modelName) => ({
+          modelName,
+          priceSource: 'auto',
+          modelRatio: 0,
+          completionRatio: 1,
+        })),
+    });
+    const listed = channel.models
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const merged = [...listed, ...picked.filter((name) => !listed.includes(name))];
+    if (merged.length !== listed.length) {
+      await this.prisma.channel.update({
+        where: { id: channel.id },
+        data: { models: merged.join(',') },
+      });
+      await this.channels.refreshCache();
+    }
+    return ok({
+      created: created.count,
+      existed: knownNames.size,
+      channelModels: merged.length,
+    });
+  }
+
+  /**
+   * 删除价目表行：能不能删由目录快照说了算（`CatalogService.remove`），
+   * 界面按 `deletable` 决定给不给这个按钮，服务端仍做最终判定。
+   */
+  @Delete('models/:id')
+  async remove(@Current() user: CurrentUser, @Param('id') id: string) {
+    this.users.requireAdmin(user);
+    return ok(await this.catalog.remove(parseId(id, '模型 ID')));
+  }
+
+  /** 价格字段只收非负有限数：NaN 或负数会把这一笔算成免费甚至倒找钱。 */
+  private static num(value: unknown, fallback: number): number {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
   }
 
   /**
@@ -304,6 +431,10 @@ export class WalletController {
     });
   }
 
+  /**
+   * 额度流水：默认是「我在当前租户里的这一份」；`all=1` 才是全平台台账（管理员）。
+   * 台账按身份收口：普通人带 all 也只拿回自己的流水，不因此看见别人的账目。
+   */
   @Get('wallet/txns')
   async txns(
     @Current() user: CurrentUser,
@@ -314,6 +445,26 @@ export class WalletController {
       query.pageSize,
       20,
     );
+    if (query.all === '1' && user.isAdmin()) {
+      const days = Number(query.days);
+      return ok(
+        await this.users.quotaTxnLedger(page, pageSize, offset, {
+          userId: query.userId ? parseId(query.userId, '用户 ID') : undefined,
+          // 'none' 与 0 同义：不属于任何租户的账号（平台直属）那一份流水
+          tenantId: query.tenantId
+            ? query.tenantId === 'none'
+              ? 0
+              : parseId(query.tenantId, '租户 ID')
+            : undefined,
+          type: text(query.type).toUpperCase() || undefined,
+          keyword: text(query.keyword).trim(),
+          since:
+            Number.isInteger(days) && days >= 1 && days <= 365
+              ? new Date(Date.now() - days * 86_400_000)
+              : undefined,
+        }),
+      );
+    }
     return ok(
       await this.users.quotaTxns(
         user.uid,
@@ -325,6 +476,10 @@ export class WalletController {
     );
   }
 
+  /**
+   * 调用日志：`all=1` 是平台全量视图（可筛用户 / 租户 / 渠道），
+   * 否则只是自己在当前租户里的记录。两种视图都支持类型 / 模型 / 关键词 / 最近天数筛选。
+   */
   @Get('logs')
   async logs(
     @Current() user: CurrentUser,
@@ -337,12 +492,36 @@ export class WalletController {
     );
     const all = query.all === '1' && user.isAdmin();
     // 自己的视图按当前租户收口：同一个人换到别的租户，看到的是那边的流水
-    const where = all
+    const where: Prisma.LogWhereInput = all
       ? query.userId
         ? { userId: parseId(query.userId, '用户 ID') }
         : {}
       : { userId: user.uid, tenantId: user.tenantId ?? 0 };
-    const [list, total] = await Promise.all([
+    const type = Number(query.type);
+    const days = Number(query.days);
+    const keyword = text(query.keyword).trim();
+    const modelName = text(query.modelName).trim();
+    if (all && query.tenantId) {
+      const scope = query.tenantId;
+      // 'none' 与 0 同义：不属于任何租户的平台直属账号
+      where.tenantId = scope === 'none' ? 0 : parseId(scope, '租户 ID');
+    }
+    if (all && query.channelId) {
+      where.channelId = parseId(query.channelId, '渠道 ID');
+    }
+    if (query.type && Number.isInteger(type) && type >= 0) where.type = type;
+    if (modelName) where.modelName = modelName;
+    if (Number.isInteger(days) && days >= 1 && days <= 365) {
+      where.createdAt = { gte: new Date(Date.now() - days * 86_400_000) };
+    }
+    if (keyword) {
+      where.OR = [
+        { modelName: { contains: keyword } },
+        { tokenName: { contains: keyword } },
+        { username: { contains: keyword } },
+      ];
+    }
+    const [list, total, sums] = await Promise.all([
       this.prisma.log.findMany({
         where,
         orderBy: { id: 'desc' },
@@ -350,9 +529,12 @@ export class WalletController {
         take: pageSize,
       }),
       this.prisma.log.count({ where }),
+      this.prisma.log.aggregate({ where, _sum: { quota: true } }),
     ]);
     // 平台全量视图要能看出这一笔花在哪个租户里（同一个人可以同时属于多个租户）
-    if (!all) return ok({ list, total, page, pageSize });
+    if (!all) {
+      return ok({ list, total, page, pageSize, quota: sums._sum.quota || 0 });
+    }
     const tenants = await this.prisma.tenant.findMany({
       where: { id: { in: [...new Set(list.map((row) => row.tenantId))] } },
       select: { id: true, name: true },
@@ -366,6 +548,7 @@ export class WalletController {
       total,
       page,
       pageSize,
+      quota: sums._sum.quota || 0,
     });
   }
 

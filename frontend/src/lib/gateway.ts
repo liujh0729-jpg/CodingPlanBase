@@ -230,6 +230,8 @@ export type ModelRow = {
   multimodal: boolean;
   priceCnyPerMIn: number;
   priceCnyPerMOut: number;
+  /** 目录快照里没有这个模型（手工新增 / 上游入库 / 首次调用自动补）才可删；服务端仍做最终判定。 */
+  deletable?: boolean;
 };
 
 /**
@@ -368,7 +370,7 @@ export type TenantRow = {
 
 export type TenantOption = { id: number; name: string; code: string };
 
-/** 租户概览（管理菜单 / 订购管理共用）：额度池余量 + 池内已分配 / 已消耗 + 本租户的软件权益。 */
+/** 租户概览（本租户管理 / 订购管理共用）：额度池余量 + 池内已分配 / 已消耗 + 本租户的软件权益。 */
 export type ConsoleOverview = TenantRow & {
   /** 本租户成员数与其中的管理员数（租户内权限两档）。 */
   memberCount: number;

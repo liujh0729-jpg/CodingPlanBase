@@ -51,7 +51,8 @@ export function ModelsTab() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [editing, setEditing] = useState<ModelRow | null>(null);
-  const [form] = Form.useForm<ModelValues>();
+  const [creating, setCreating] = useState(false);
+  const [form] = Form.useForm<ModelValues & { modelName: string }>();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -107,9 +108,41 @@ export function ModelsTab() {
     setEditing(row);
   };
 
+  /** 新增模型：表单与「定价」共用一套字段，只多一个模型名。 */
+  const openCreate = () => {
+    form.resetFields();
+    form.setFieldsValue({
+      modelName: "",
+      quotaType: 0,
+      modelRatio: 0,
+      completionRatio: 1,
+      cacheReadRatio: 0,
+      cacheWriteRatio: 0,
+      callCnyPrice: 0,
+      groupRatio: 1,
+      enableGroups: "default",
+      endpoints: "chat",
+      description: "",
+    });
+    setCreating(true);
+  };
+
   const submit = async () => {
-    if (!editing) return;
     const values = await form.validateFields();
+    if (creating) {
+      const payload = await postJson<ModelRow>("/gateway/models", values);
+      if (payload.code !== 0) {
+        message.error(payload.message);
+        return;
+      }
+      message.success(
+        `已加入价目表：${values.modelName}。要把这个模型接上上游，还得在「渠道管理」把它列进某个渠道的模型清单`,
+      );
+      setCreating(false);
+      await load();
+      return;
+    }
+    if (!editing) return;
     const payload = await api<ModelRow>(`/gateway/models/${editing.id}`, {
       method: "PATCH",
       body: JSON.stringify(values),
@@ -125,6 +158,32 @@ export function ModelsTab() {
     );
     setEditing(null);
     await load();
+  };
+
+  /**
+   * 删除只放行目录快照里没有的模型（`deletable`）：托管行删了下次同步原样回来，
+   * 那个按钮给它没有意义，所以界面直接不给，服务端另有最终判定。
+   */
+  const removeRow = (row: ModelRow) => {
+    modal.confirm({
+      title: `删除模型 ${row.modelName}`,
+      content:
+        "从价目表移除这一行。历史用量日志按模型名留快照，不受影响；但如果某个渠道的模型清单里还写着它，调用会因找不到定价按 0 价放行——请先确认这个模型不再对外提供。",
+      okText: "确认删除",
+      okButtonProps: { danger: true },
+      cancelText: "再想想",
+      onOk: async () => {
+        const payload = await api(`/gateway/models/${row.id}`, {
+          method: "DELETE",
+        });
+        if (payload.code !== 0) {
+          message.error(payload.message);
+          return;
+        }
+        message.success("已从价目表删除");
+        await load();
+      },
+    });
   };
 
   /** 恢复目录价：后端按当前目录快照立刻重算这一行并交还同步接管，不等下一次同步跑。 */
@@ -169,9 +228,14 @@ export function ModelsTab() {
           </span>
         }
         extra={
-          <Button loading={syncing} onClick={() => void sync()}>
-            同步模型目录
-          </Button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <Button type="primary" onClick={openCreate}>
+              新增模型
+            </Button>
+            <Button loading={syncing} onClick={() => void sync()}>
+              同步模型目录
+            </Button>
+          </div>
         }
       >
         <div className="table-wrap">
@@ -181,7 +245,14 @@ export function ModelsTab() {
             loading={loading}
             dataSource={rows}
             pagination={tablePagination}
-            locale={{ emptyText: <EmptyState icon="🧮" text="还没有模型，请先在系统设置里完成 AIPDD 接入或新建渠道" /> }}
+            locale={{
+              emptyText: (
+                <EmptyState
+                  icon="🧮"
+                  text="还没有模型：在这里点「新增模型」手工录入，或到「渠道管理」用行内的「拉取入库」把上游模型勾选进来；接了 AIPDD 目录再点「同步模型目录」成批改价目表。"
+                />
+              ),
+            }}
             columns={[
               {
                 title: "模型",
@@ -291,15 +362,20 @@ export function ModelsTab() {
               },
               {
                 title: "操作",
-                width: 170,
+                width: 200,
                 render: (_, row) => (
                   <div style={{ display: "flex", gap: 8 }}>
                     <Button size="small" onClick={() => openEdit(row)}>
                       定价
                     </Button>
-                    {row.priceSource === "manual" ? (
+                    {row.priceSource === "manual" && row.deletable === false ? (
                       <Button size="small" onClick={() => resetPrice(row)}>
                         恢复目录价
+                      </Button>
+                    ) : null}
+                    {row.deletable ? (
+                      <Button size="small" danger onClick={() => removeRow(row)}>
+                        删除
                       </Button>
                     ) : null}
                   </div>
@@ -331,16 +407,38 @@ export function ModelsTab() {
       </Panel>
 
       <Modal
-        title={editing ? `定价 · ${editing.modelName}` : "定价"}
-        open={Boolean(editing)}
-        onCancel={() => setEditing(null)}
+        title={
+          creating
+            ? "新增模型"
+            : editing
+              ? `定价 · ${editing.modelName}`
+              : "定价"
+        }
+        open={creating || Boolean(editing)}
+        onCancel={() => {
+          setCreating(false);
+          setEditing(null);
+        }}
         onOk={() => void submit()}
-        okText="保存定价"
+        okText={creating ? "加入价目表" : "保存定价"}
         cancelText="取消"
         width={680}
         destroyOnHidden
       >
         <Form form={form} layout="vertical">
+          {creating ? (
+            <Form.Item
+              name="modelName"
+              label="模型名"
+              extra="与上游一致的模型标识，例如 gpt-4o、deepseek-chat；它是选路与计费的唯一键，建好后不能改名"
+              rules={[
+                { required: true, message: "请输入模型名" },
+                { max: 120, message: "模型名最长 120 个字符" },
+              ]}
+            >
+              <Input placeholder="gpt-4o" autoFocus />
+            </Form.Item>
+          ) : null}
           <div className="form-2col">
             <Form.Item name="quotaType" label="计价方式">
               <Select

@@ -49,7 +49,7 @@ export default function AdminSectionPage() {
     );
   }
 
-  // 板块自身声明的角色门槛（系统设置＝超级管理员）：不满足就不渲染内容，侧栏也没有这项
+  // 板块自身声明的角色门槛（模型设置＝超级管理员）：不满足就不渲染内容，侧栏也没有这项
   if (!adminSectionAllowed(meta, isRoot)) {
     return (
       <Panel title="无访问权限">

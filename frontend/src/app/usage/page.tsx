@@ -263,7 +263,7 @@ export default function UsagePage() {
             </div>
             <Notice variant="info">
               <span style={{ marginTop: 0, display: "block" }}>
-                额度不足时：请联系本租户管理员在「管理菜单 → 用户管理 → 划拨额度」补充
+                额度不足时：请联系本租户管理员在「本租户管理 → 用户管理 → 划拨额度」补充
                 （池内不足则由租户管理员在「设置 → 订购管理」向平台订购额度包）；
                 不属于任何租户的平台账号，由平台管理员在「账号管理 → 分配额度」补充。
               </span>

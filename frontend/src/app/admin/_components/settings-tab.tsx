@@ -19,7 +19,7 @@ type SetupStatus = {
 };
 
 /**
- * 系统设置（超级管理员板块）：AIPDD 接入向导（密钥只写不读）、计费换算参数与开放注册。
+ * 模型设置（超级管理员板块）：AIPDD 接入向导（密钥只写不读）、计费换算参数与开放注册。
  * 在线支付与商品配置在「支付管理」板块。
  * 密钥类配置后端读取时掩码，掩码值或空值提交视为「不修改」。
  */
@@ -55,7 +55,7 @@ export function SettingsTab() {
       }
       if (setupResult.data) setStatus(setupResult.data);
       if (setupResult.forbidden || settingsResult.forbidden) {
-        message.warning("需要超级管理员权限才能查看系统设置");
+        message.warning("需要超级管理员权限才能查看模型设置");
       }
     } finally {
       setLoading(false);
@@ -252,7 +252,7 @@ export function SettingsTab() {
               }
             />
           </FieldLabel>
-          <FieldLabel label="开放注册" hint="关闭后仅管理员可在「账号管理」或管理菜单建号">
+          <FieldLabel label="开放注册" hint="关闭后仅管理员可在「账号管理」建号，或由租户管理员在「用户管理」里建 / 拉成员">
             <Switch
               checked={billingForm.allow_registration === "true"}
               onChange={(checked) =>

@@ -16,7 +16,7 @@ export type AdminSection = {
   minRole?: number;
 };
 
-/** 管理菜单板块：结构与 AdminSection 一致，只是门槛由「必须是租户管理员」固定，不再分级。 */
+/** 租户管理板块：结构与 AdminSection 一致，只是门槛由「必须是当前租户的管理员」固定，不再分级。 */
 export type ConsoleSection = {
   key: string;
   name: string;
@@ -33,7 +33,7 @@ export const ORDERS_PATH = "/orders";
  * 平台管理后台板块：侧栏菜单项 + 子路由（`/admin/<key>`）。
  * 菜单、顶栏标题、页面 hero 文案同源，新增板块只改这一处。
  * 分工口径：系统管理员管理租户，租户管理员在 /console 管理自家 User。
- * 门槛：额度换算、零售倍率、上游接入与开放注册是平台级参数，收在「系统设置」（minRole 100）。
+ * 门槛：额度换算、零售倍率、上游接入与开放注册是平台级参数，收在「模型设置」（minRole 100）。
  */
 export const ADMIN_SECTIONS: AdminSection[] = [
   {
@@ -70,7 +70,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     key: "channels",
     name: "渠道管理",
     icon: "api",
-    desc: "大模型上游渠道：优先级 + 权重选路、多密钥轮换、调用失败自动换渠道、模型重定向、连通性测试与自动禁用。",
+    desc: "大模型上游渠道：优先级 + 权重选路、多密钥轮换、调用失败自动换渠道、模型重定向、连通性测试与自动禁用；可拉取上游模型清单并勾选入库价目表。",
   },
   {
     key: "tokens",
@@ -82,26 +82,26 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     key: "models",
     name: "价目表",
     icon: "chip",
-    desc: "模型零售价：按 token 或按次计价、补全/缓存倍率与模型倍率；被管理员钉住的定价可一键恢复目录价。",
+    desc: "模型零售价：手工新增模型、按 token 或按次计价、补全/缓存倍率与模型倍率；被管理员钉住的定价可一键恢复目录价，非目录托管的行可删除。",
   },
   {
     key: "logs",
     name: "全平台日志",
     icon: "file-done",
-    desc: "全平台调用与额度流水：模型、令牌、渠道归属与折算金额（渠道/令牌删除后仍保留快照）。",
+    desc: "两块台账分列：调用日志按账号 / 租户 / 类型 / 模型 / 渠道 / 时间筛，含折算金额与计费快照（渠道、令牌删除后仍保留当时的归属）；额度流水是全平台成员额度变动台账，每一笔都看得出动谁的、记在哪个租户、由谁操作。",
   },
   {
     key: "settings",
-    name: "系统设置",
+    name: "模型设置",
     icon: "setting",
-    desc: "AIPDD 接入向导、开放注册与额度换算参数（1 元对应额度、零售定价倍率、注册赠送）。",
+    desc: "模型接入与换算参数：AIPDD 目录接入向导与同步间隔、额度换算（1 元对应额度）、零售定价倍率、开放注册与注册赠送。渠道与模型本身在「渠道管理」新建、「价目表」新增。",
     minRole: 100,
   },
 ];
 
 /**
  * 板块可见性的唯一判定：角色门槛由 `minRole` 声明（默认 10 = 平台管理员），
- * 侧栏、深链门控与「前往系统设置」类入口提示都走这里，口径不会分叉。
+ * 侧栏、深链门控与「前往模型设置」类入口提示都走这里，口径不会分叉。
  */
 export function adminSectionAllowed(
   item: AdminSection,
@@ -130,10 +130,10 @@ export function adminRouteFor(isRoot: boolean): BaseRoute {
 }
 
 /**
- * 管理菜单板块：侧栏菜单项 + 子路由（`/console/<key>`）。
- * 与平台侧同构：租户管理员只是权限更高的 User——前台菜单照旧，多一个管理入口，
- * 进去以后整棵侧栏都是租户这一层的管理菜单（自家 User 与本租户用量）。
- * 对平台的订购不在这里：那是租户自己的账，收在前台「设置 → 订购管理」。
+ * 租户这一层的管理板块：路由 `/console/<板块>`，菜单项渲染在前台侧栏的「本租户管理」分组里。
+ * 门槛是「当前租户的管理员」（`tenant_members.role = 5`），与全局身份无关：
+ * 同一个人可以在 A 租户看到这组、在 B 租户看不到。
+ * 对平台的订购不在这里：那是租户对平台的交易，收在前台「设置 → 订购管理」。
  */
 export const CONSOLE_SECTIONS: ConsoleSection[] = [
   {
@@ -150,32 +150,20 @@ export const CONSOLE_SECTIONS: ConsoleSection[] = [
   },
 ];
 
-export function consoleRouteFor(): BaseRoute {
-  return {
-    path: "/",
-    routes: [
-      {
-        type: "group",
-        name: "管理菜单",
-        routes: CONSOLE_SECTIONS.map((item) => ({
-          path: `${CONSOLE_PATH}/${item.key}`,
-          name: item.name,
-          icon: item.icon,
-        })),
-      },
-    ],
-  };
-}
-
 /**
  * 前台导航：租户底座交付给使用方的界面——
- * AI 服务（模型与价格 / 用量与额度）+ 设置（API 令牌 / 账号设置 / 订购管理）。
- * 订购管理对「当前租户的管理员」与平台管理员 / 超管可见：租户管理员在这里向平台下单，
+ * AI 服务（工作台 / 模型与价格 / 用量与额度）+ 本租户管理（用户管理 / 模型使用记录，仅本租户管理员）
+ * + 设置（API 令牌 / 账号设置 / 订购管理）。
+ * **一棵树按权限长内容**：租户管理员不再另切一棵管理树、也不在顶栏单开入口；
+ * 他的管理动作就是前台侧栏里多出「本租户管理」这一组，切租户后按新租户里的角色重新决定显不显示。
+ * 订购管理对「当前租户的管理员」与平台管理员 / 超管都可见：租户管理员在这里向平台下单，
  * 平台管理员 / 超管看到的是全平台订购记录；租户里的普通成员没有这一项（订购是租户对平台的交易，他不参与）。
  * 一个账号可以属于多个租户，切到哪个租户就是哪个租户的身份与额度——顶栏的租户切换器负责这件事。
- * 租户管理员的管理入口不在这里：与平台侧一样走顶栏切换，进入后换成 `consoleRouteFor()` 那棵树。
  */
-export function baseRouteFor(options: { canOrder: boolean }): BaseRoute {
+export function baseRouteFor(options: {
+  canOrder: boolean;
+  canManageTenant: boolean;
+}): BaseRoute {
   const settingsRoutes: BaseRoute[] = [
     { path: "/keys", name: "API 令牌", icon: "key" },
     { path: "/account", name: "账号设置", icon: "idcard" },
@@ -183,25 +171,32 @@ export function baseRouteFor(options: { canOrder: boolean }): BaseRoute {
   if (options.canOrder) {
     settingsRoutes.push({ path: ORDERS_PATH, name: "订购管理", icon: "order" });
   }
-  return {
-    path: "/",
-    routes: [
-      {
-        type: "group",
-        name: "AI 服务",
-        routes: [
-          { path: "/", name: "工作台", icon: "dashboard" },
-          { path: "/models", name: "模型与价格", icon: "chip" },
-          { path: "/usage", name: "用量与额度", icon: "audit" },
-        ],
-      },
-      {
-        type: "group",
-        name: "设置",
-        routes: settingsRoutes,
-      },
-    ],
-  };
+  const routes: BaseRoute[] = [
+    {
+      type: "group",
+      name: "AI 服务",
+      routes: [
+        { path: "/", name: "工作台", icon: "dashboard" },
+        { path: "/models", name: "模型与价格", icon: "chip" },
+        { path: "/usage", name: "用量与额度", icon: "audit" },
+      ],
+    },
+  ];
+  // 非管理员不渲染这一组（不置灰）：分组下没有项时 withRouteIcons 会整组丢掉。
+  // 组名取「本租户管理」而不是「租户管理」：后者是平台侧板块（开通 / 停用各家租户），同屏不能重名。
+  if (options.canManageTenant) {
+    routes.push({
+      type: "group",
+      name: "本租户管理",
+      routes: CONSOLE_SECTIONS.map((item) => ({
+        path: `${CONSOLE_PATH}/${item.key}`,
+        name: item.name,
+        icon: item.icon,
+      })),
+    });
+  }
+  routes.push({ type: "group", name: "设置", routes: settingsRoutes });
+  return { path: "/", routes };
 }
 
 export const PAGE_META: Record<
@@ -230,12 +225,12 @@ export const PAGE_META: Record<
     description: "向平台订购软件能力：当前租户的管理员选购下单与自家单据，平台管理员 / 超管看全平台订购记录。",
   },
   [CONSOLE_PATH]: {
-    title: "管理菜单",
+    title: "本租户管理",
     description: "管理本租户的 User 与本租户的模型使用记录。",
   },
   "/admin": {
     title: "平台管理后台",
-    description: "租户、账号、渠道、令牌、计费、日志与系统设置。",
+    description: "租户、账号、渠道、令牌、计费、日志与模型设置。",
   },
   // 各板块标题 / 说明与侧栏菜单同源（ADMIN_SECTIONS / CONSOLE_SECTIONS），顶栏与页面 hero 直接取这里。
   ...Object.fromEntries(
